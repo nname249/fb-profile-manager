@@ -115,12 +115,26 @@ export async function getCookies(account, proxy) {
             // Get status from current pages if possible, or visit once
             const pages = context.pages();
             const page = pages.length > 0 ? pages[0] : await context.newPage();
-            const url = page.url();
+            // Detection logic based on UID
+            const cUser = cookies.find(c => c.name === 'c_user');
+            let status = "Die/Logout";
 
-            let status = "Unknown";
-            if (url.includes("checkpoint")) status = "Checkpoint";
-            else if (url.includes("login") || url.includes("facebook.com/confirm")) status = "Die/Logout";
-            else if (url.includes("facebook.com")) status = "Live";
+            if (cUser && cUser.value && cUser.value !== "0") {
+                status = "Live";
+            } else {
+                const content = await page.content();
+                if (content.includes("ACCOUNT_ID") && !content.includes("checkpoint")) {
+                    const match = content.match(/\"ACCOUNT_ID\":\"(\d+)\"/);
+                    if (match && match[1] && match[1] !== "0") status = "Live";
+                }
+
+                // Fallback keywords if not Live
+                if (status !== "Live") {
+                    const url = page.url();
+                    if (url.includes("checkpoint")) status = "Checkpoint";
+                    else if (url.includes("confirm_identity")) status = "Checkpoint";
+                }
+            }
 
             return {
                 cookies: formatCookies(cookies),
@@ -175,27 +189,22 @@ export async function getCookies(account, proxy) {
         // Check status by visiting FB
         await page.goto("https://www.facebook.com", { waitUntil: 'domcontentloaded', timeout: 15000 });
         const url = page.url();
+        let status = "Die/Logout";
 
-        let status = "Unknown";
-
-        // Improved detection logic
-        if (url.includes("checkpoint") || url.includes("multi_step_checkpoint")) {
-            status = "Checkpoint";
-        } else if (url.includes("disabled") || url.includes("banned") || url.includes("confirm_identity")) {
-            status = "Die/Banned";
-        } else if (url.includes("login") || url.includes("confirmemail") || url.includes("hacker")) {
-            status = "Die/Logout";
-        } else if (url.includes("facebook.com")) {
-            // Check for specific markers in a few seconds just in case of redirects
-            try {
-                const title = await page.title();
-                if (title.includes("Facebook") || title.includes("Feed")) {
-                    status = "Live";
-                } else {
-                    status = "Check Again";
-                }
-            } catch (e) {
+        // Strategy 1: Check c_user cookie
+        const cUser = cookies.find(c => c.name === 'c_user');
+        if (cUser && cUser.value && cUser.value !== "0") {
+            status = "Live";
+        } else {
+            // Strategy 2: Check ACCOUNT_ID in page source
+            const content = await page.content();
+            const match = content.match(/\"ACCOUNT_ID\":\"(\d+)\"/);
+            if (match && match[1] && match[1] !== "0") {
                 status = "Live";
+            } else if (url.includes("checkpoint") || url.includes("multi_step_checkpoint") || url.includes("confirm_identity")) {
+                status = "Checkpoint";
+            } else if (url.includes("disabled") || url.includes("banned")) {
+                status = "Die/Banned";
             }
         }
 
