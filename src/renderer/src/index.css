@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+@theme {
+  --color-fb-blue: #0084ff;
+  --color-fb-bg-main: #0c0e12;
+  --color-fb-bg-card: rgba(26, 29, 35, 0.7);
+  --color-fb-bg-header: #14171d;
+}
+
+@layer base {
+  body {
+    @apply bg-[#0c0e12] text-white overflow-hidden h-screen select-none;
+    background-image: radial-gradient(circle at 50% 0%, #1a1d23 0%, #0c0e12 100%);
+  }
+}
+
+@layer utilities {
+  .glass {
+    @apply bg-[#1a1d23]/70 backdrop-blur-md border border-white/10;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-white/10 rounded-full;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-custom {
+  animation: spin 1s linear infinite;
+}

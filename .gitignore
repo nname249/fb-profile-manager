@@ -1,0 +1,9 @@
+dist
+node_modules
+out
+.vite
+.vscode
+.idea
+.env
+package-lock.json
+README.md
