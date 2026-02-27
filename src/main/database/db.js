@@ -7,17 +7,9 @@ let db;
 
 function getDb() {
     if (!db) {
-        // Determine the base data path relative to the executable for self-contained behavior
-        // If packaged, go up from the resources folder/app path to find the install root
-        let baseDataPath;
-        if (app.isPackaged) {
-            // Usually: [InstallDir]\resources\app.asar
-            // We want: [InstallDir]\data
-            baseDataPath = join(app.getAppPath(), "..", "..", "data");
-        } else {
-            // In dev mode, use current folder
-            baseDataPath = join(process.cwd(), "data");
-        }
+        // Use system's dedicated AppData folder for permanent storage
+        // This ensures data persists through app updates and uninstalls
+        const baseDataPath = app.getPath("userData");
 
         if (!fs.existsSync(baseDataPath)) {
             fs.mkdirSync(baseDataPath, { recursive: true });

@@ -44,6 +44,9 @@ export async function launchAccount(account, proxy) {
         "--window-position=0,0",
         "--ignore-certificate-errors",
         "--disable-notifications",
+        "--disk-cache-size=1",
+        "--media-cache-size=1",
+        "--disable-features=CalculateNativeWinOcclusion,InterestFeedContentSuggestions",
     ];
 
     const launchOptions = {
@@ -125,6 +128,7 @@ export async function getCookies(account, proxy) {
             };
         } catch (err) {
             console.error("Lỗi lấy Cookies từ context đang mở:", err);
+            throw new Error("Không thể lấy Cookies từ trình duyệt đang mở. Vui lòng kiểm tra lại tab Facebook.");
         }
     }
 
@@ -141,7 +145,9 @@ export async function getCookies(account, proxy) {
         args: [
             "--disable-blink-features=AutomationControlled",
             "--no-sandbox",
-            "--disable-setuid-sandbox"
+            "--disable-setuid-sandbox",
+            "--disk-cache-size=1",
+            "--media-cache-size=1"
         ],
     };
 
@@ -156,8 +162,8 @@ export async function getCookies(account, proxy) {
     }
 
     const browserContext = await chromium.launchPersistentContext(userDataDir, launchOptions).catch(err => {
-        if (err.message.includes('used by another browser')) {
-            throw new Error("Profile đang được mở bởi chương trình khác. Hãy đóng nó trước khi lấy Cookies.");
+        if (err.message.includes('used by another browser') || err.message.includes('Access is denied')) {
+            throw new Error("Profile đang được sử dụng hoặc bị khóa. Hãy đóng các trình duyệt đang mở của tài khoản này.");
         }
         throw err;
     });
@@ -212,6 +218,16 @@ export async function getInternalUID(account, proxy) {
         const cookies = await context.cookies();
         const cUser = cookies.find(c => c.name === 'c_user');
         if (cUser) return cUser.value;
+
+        // If open but no c_user, try to grab from page source if a page is open
+        const pages = context.pages();
+        if (pages.length > 0) {
+            const content = await pages[0].content();
+            const match = content.match(/\"ACCOUNT_ID\":\"(\d+)\"/);
+            if (match && match[1]) return match[1];
+        }
+
+        throw new Error("Không tìm thấy UID. Vui lòng đăng nhập Facebook trên trình duyệt đang mở.");
     }
 
     // Otherwise launch headlessly and check
@@ -223,7 +239,17 @@ export async function getInternalUID(account, proxy) {
     const browserContext = await chromium.launchPersistentContext(userDataDir, {
         headless: true,
         executablePath,
-        args: ["--disable-blink-features=AutomationControlled", "--no-sandbox"]
+        args: [
+            "--disable-blink-features=AutomationControlled",
+            "--no-sandbox",
+            "--disk-cache-size=1",
+            "--media-cache-size=1"
+        ]
+    }).catch(err => {
+        if (err.message.includes('used by another browser') || err.message.includes('Access is denied')) {
+            throw new Error("Vui lòng đóng trình duyệt của tài khoản này trước khi thực hiện.");
+        }
+        throw err;
     });
 
     try {
