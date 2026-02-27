@@ -203,6 +203,50 @@ export async function getCookies(account, proxy) {
 }
 
 /**
+ * Extracts the internal FB UID (c_user or ACCOUNT_ID) from the page source or cookies
+ */
+export async function getInternalUID(account, proxy) {
+    // Check if browser is open
+    if (activeContexts.has(account.id)) {
+        const context = activeContexts.get(account.id);
+        const cookies = await context.cookies();
+        const cUser = cookies.find(c => c.name === 'c_user');
+        if (cUser) return cUser.value;
+    }
+
+    // Otherwise launch headlessly and check
+    const profileSetting = db.get("SELECT value FROM settings WHERE key = 'profile_path'");
+    const baseProfilePath = profileSetting.value;
+    const userDataDir = join(baseProfilePath, account.uid || `profile_${account.id}`);
+    const executablePath = getExecutablePath();
+
+    const browserContext = await chromium.launchPersistentContext(userDataDir, {
+        headless: true,
+        executablePath,
+        args: ["--disable-blink-features=AutomationControlled", "--no-sandbox"]
+    });
+
+    try {
+        const page = await browserContext.newPage();
+        await page.goto("https://www.facebook.com", { waitUntil: 'domcontentloaded', timeout: 15000 });
+
+        // Strategy 1: Cookies (Fastest)
+        const cookies = await browserContext.cookies();
+        const cUser = cookies.find(c => c.name === 'c_user');
+        if (cUser) return cUser.value;
+
+        // Strategy 2: Page Source (Fallback)
+        const content = await page.content();
+        const match = content.match(/\"ACCOUNT_ID\":\"(\d+)\"/);
+        if (match && match[1]) return match[1];
+
+        return "Not found";
+    } finally {
+        await browserContext.close();
+    }
+}
+
+/**
  * Check account status without returning full cookies
  */
 export async function checkStatus(account, proxy) {

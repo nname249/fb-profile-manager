@@ -4,7 +4,7 @@ import { autoUpdater } from "electron-updater";
 import { exec } from "child_process";
 import fs from "fs";
 import db from "./database/db.js";
-import { launchAccount, getCookies, checkStatus } from "./automation/browser.js";
+import { launchAccount, getCookies, checkStatus, getInternalUID } from "./automation/browser.js";
 
 let mainWindow;
 
@@ -71,6 +71,16 @@ app.whenReady().then(() => {
             return newPath;
         }
         return null;
+    });
+
+    ipcMain.handle("settings:get", (event, key) => {
+        const setting = db.get("SELECT value FROM settings WHERE key = ?", key);
+        return setting ? setting.value : null;
+    });
+
+    ipcMain.handle("settings:set", (event, key, value) => {
+        db.run("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", key, value);
+        return true;
     });
 
     // --- ACCOUNTS IPC ---
@@ -141,8 +151,37 @@ app.whenReady().then(() => {
             const proxy = account.proxy_id
                 ? db.get("SELECT * FROM proxies WHERE id = ?", account.proxy_id)
                 : null;
-            const status = await checkStatus(account, proxy);
-            return { success: true, status };
+            const res = await checkStatus(account, proxy);
+            return { success: true, status: res };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle("accounts:get-internal-uid", async (event, accountId) => {
+        try {
+            const account = db.get("SELECT * FROM accounts WHERE id = ?", accountId);
+            const proxy = account.proxy_id
+                ? db.get("SELECT * FROM proxies WHERE id = ?", account.proxy_id)
+                : null;
+            const internalUid = await getInternalUID(account, proxy);
+            return { success: true, internalUid };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle("accounts:update", async (event, account) => {
+        try {
+            db.run(
+                "UPDATE accounts SET uid = ?, password = ?, two_fa = ?, note = ? WHERE id = ?",
+                account.uid,
+                account.password,
+                account.two_fa,
+                account.note,
+                account.id
+            );
+            return { success: true };
         } catch (error) {
             return { success: false, error: error.message };
         }
